@@ -499,34 +499,42 @@ export default function App() {
           }
 
           const dayBlockIds = currentBlocks.filter(b => b.day === dayLetter).map(b => b.id);
-          const isGenericCode = !classCode || classCode.toUpperCase() === "N/A" || classCode.toUpperCase() === "GEN101";
+          const cleanCode = (classCode || '').trim().toUpperCase();
+          const isGenericCode = !cleanCode || cleanCode === "N/A" || cleanCode === "GEN101" || cleanCode === "NONE";
 
           let courseIdx = currentCourses.findIndex(c => {
-            const sameCode = c.code && classCode && !isGenericCode && c.code.toLowerCase().trim() === classCode.toLowerCase().trim();
+            const cCleanCode = (c.code || '').trim().toUpperCase();
+
+            // 1. Primary rule: If a valid Class Code is provided, STRICT MATCH on Class Code
+            if (!isGenericCode) {
+              if (cCleanCode !== cleanCode) {
+                // Different codes MUST NEVER be merged together
+                return false;
+              }
+              // Code matches! Verify this section doesn't conflict with another block on the same day
+              const existingBlockForDay = (c.blockIds || []).find(bId => dayBlockIds.includes(bId));
+              if (existingBlockForDay && existingBlockForDay !== targetBlock.id) {
+                return false;
+              }
+              return true;
+            }
+
+            // 2. Fallback rule ONLY when classCode is generic or missing ("N/A", "GEN101", etc.)
             const sameName = c.name && className && c.name.toLowerCase().trim() === className.toLowerCase().trim();
-            
             const cTeachers = (c.teacher || '').split(';').map(t => t.trim().toLowerCase()).filter(Boolean);
             const importTeachers = (teacher || '').split(';').map(t => t.trim().toLowerCase()).filter(Boolean);
             const sameTeacher = cTeachers.some(ct => importTeachers.includes(ct)) || 
                               (c.teacher && teacher && c.teacher.toLowerCase().trim() === teacher.toLowerCase().trim());
 
-            let isMatch = false;
-            if (!isGenericCode && sameCode) {
-              isMatch = true;
-            } else if (sameName && sameTeacher) {
-              isMatch = true;
-            } else if (sameName && (!c.teacher || c.teacher === "Staff" || c.teacher === "N/A")) {
-              isMatch = true;
+            if (sameName && (sameTeacher || !c.teacher || c.teacher === "Staff" || c.teacher === "N/A")) {
+              const existingBlockForDay = (c.blockIds || []).find(bId => dayBlockIds.includes(bId));
+              if (existingBlockForDay && existingBlockForDay !== targetBlock.id) {
+                return false;
+              }
+              return true;
             }
 
-            if (!isMatch) return false;
-
-            const existingBlockForDay = (c.blockIds || []).find(bId => dayBlockIds.includes(bId));
-            if (existingBlockForDay && existingBlockForDay !== targetBlock.id) {
-              return false;
-            }
-
-            return true;
+            return false;
           });
 
           let courseObj;
